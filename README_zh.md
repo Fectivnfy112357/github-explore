@@ -45,14 +45,17 @@
 ## 快速开始
 
 ```bash
-# 1. 克隆
-git clone https://github.com/Fectivnfy112357/github-explore.git
-cd github-explore
+# 1. 安装 skill（支持 Claude Code、Codex、Cursor 等 17+ agent CLI）
+npx skills add Fectivnfy112357/github-explore
+
+# Hermes Agent 用户：
+hermes skills install https://raw.githubusercontent.com/Fectivnfy112357/github-explore/main/SKILL.md
 
 # 2. 确认 gh CLI 已认证
 gh auth status
 
-# 3. 试一下
+# 3. 试一下（脚本位于安装后的 skill 目录，Claude Code 为 ~/.claude/skills/github-explore/）
+cd ~/.claude/skills/github-explore
 python scripts/find_repos.py "向量数据库" --language python --min-stars 500
 python scripts/explore.py "多 agent 协作" \
   --axis "framework|multi-agent framework in:readme; collaborative agents in:readme" \

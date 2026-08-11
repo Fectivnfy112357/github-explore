@@ -45,14 +45,17 @@ Plain `gh search` has three structural problems for agent-driven research:
 ## Quick start
 
 ```bash
-# 1. Clone
-git clone https://github.com/Fectivnfy112357/github-explore.git
-cd github-explore
+# 1. Install the skill (Claude Code, Codex, Cursor, and 15+ agent CLIs)
+npx skills add Fectivnfy112357/github-explore
+
+# Hermes Agent users
+hermes skills install https://raw.githubusercontent.com/Fectivnfy112357/github-explore/main/SKILL.md
 
 # 2. Make sure gh CLI is authenticated
 gh auth status
 
-# 3. Try it
+# 3. Try it — scripts live under the installed skill dir (e.g. ~/.claude/skills/github-explore/)
+cd ~/.claude/skills/github-explore
 python scripts/find_repos.py "vector database" --language python --min-stars 500
 python scripts/explore.py "multi-agent" \
   --axis "framework|multi-agent framework in:readme; collaborative agents in:readme" \
