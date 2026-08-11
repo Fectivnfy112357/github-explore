@@ -28,7 +28,7 @@ metadata:
 - 「找代码片段 / where is pattern used」→ `code_search.py`
 - 「找 issue/PR」→ `search_issues.py`
 - 「审计整个 org / 按语言/活跃度/主题分组」→ `org_landscape.py`
-- 「建 repo / 提 PR / 改 label / 跑 workflow」→ 直接 `gh`（命令索引见 `references/commands-*.md`，按类型查）
+- 「建 repo / 提 PR / 改 label / 跑 workflow」→ 直接 `gh`（命令索引见 references/ 下的 commands-* 系列，按类型查）
 - 不要用脚本做：管理类写操作（创建/修改/删除）。
 
 ## When to use which script — the deeper logic
@@ -118,7 +118,7 @@ python scripts/org_landscape.py langchain-ai --group-by activity
 所有发现类脚本 `--format json` 返回**相同字段命名**（GitHub API 原生 camelCase，**不是** snake_case）。**不要猜字段——读契约的两种方式**：
 
 1. `python scripts/<script>.py --schema`（仅 4 个脚本支持：`find_repos` / `explore` / `repo_summary`，以及通过 `_lib.print_schema` 间接调）
-2. 直接看 `scripts/schemas/<script>.schema.json`（目前只有 `explore` / `repo` / `repo_summary` 三个 schema 文件；其他 6 个脚本的输出结构以 `gh search` 原生 JSON 字段为准，参考 `references/commands-search-format.md`）
+2. 直接看 scripts/schemas/ 目录下的 schema 文件（目前只有 `explore` / `repo` / `repo_summary` 三个 schema 文件；其他 6 个脚本的输出结构以 `gh search` 原生 JSON 字段为准，参考 `references/commands-search-format.md`）
 
 三个契约文件的**关键差异**（猜错必踩的坑）：
 
@@ -179,4 +179,4 @@ python scripts/trending.py --window 30d --format json \
 - [ ] explore 查询角度具体且带 `in:readme`（语义主题）
 - [ ] 配额敏感时 `--max-workers 2`、`--awesome` 只跑一次
 - [ ] org/repo 审计确认了过滤条件（fork/archived/stars）符合预期
-- [ ] 管理操作按类型查 `references/commands-*.md`（不内联复制，不误用脚本）
+- [ ] 管理操作按类型查 references/ 下的 commands-* 系列（不内联复制，不误用脚本）
