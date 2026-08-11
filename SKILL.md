@@ -118,7 +118,7 @@ python scripts/org_landscape.py langchain-ai --group-by activity
 所有发现类脚本 `--format json` 返回**相同字段命名**（GitHub API 原生 camelCase，**不是** snake_case）。**不要猜字段——读契约的两种方式**：
 
 1. `python scripts/<script>.py --schema`（仅 4 个脚本支持：`find_repos` / `explore` / `repo_summary`，以及通过 `_lib.print_schema` 间接调）
-2. 直接看 scripts/schemas/ 目录下的 schema 文件（目前只有 `explore` / `repo` / `repo_summary` 三个 schema 文件；其他 6 个脚本的输出结构以 `gh search` 原生 JSON 字段为准，参考 `references/commands-search-format.md`）
+2. 直接看 `explore.schema.json` / `repo.schema.json` / `repo_summary.schema.json` 三个契约文件（位于脚本目录下的 schemas 子目录；其他 6 个脚本的输出结构以 `gh search` 原生 JSON 字段为准，参考 `references/commands-search-format.md`）
 
 三个契约文件的**关键差异**（猜错必踩的坑）：
 
