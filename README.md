@@ -49,7 +49,7 @@ Plain `gh search` has three structural problems for agent-driven research:
 npx skills add Fectivnfy112357/github-explore
 
 # Hermes Agent users
-hermes skills install https://raw.githubusercontent.com/Fectivnfy112357/github-explore/main/SKILL.md
+hermes skills install https://raw.githubusercontent.com/Fectivnfy112357/github-explore/main/SKILL.md --force
 
 # 2. Make sure gh CLI is authenticated
 gh auth status

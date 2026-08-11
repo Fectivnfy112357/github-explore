@@ -49,7 +49,7 @@
 npx skills add Fectivnfy112357/github-explore
 
 # Hermes Agent 用户：
-hermes skills install https://raw.githubusercontent.com/Fectivnfy112357/github-explore/main/SKILL.md
+hermes skills install https://raw.githubusercontent.com/Fectivnfy112357/github-explore/main/SKILL.md --force
 
 # 2. 确认 gh CLI 已认证
 gh auth status
