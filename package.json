@@ -1,7 +1,7 @@
 {
   "name": "github-explore",
-  "version": "3.0.0",
-  "description": "Discovery + management wrappers around the gh CLI for AI coding agents. Ships as a standard agent skill (SKILL.md) AND as a dsh plugin (dsh.bundle.patch registers the skill at runtime).",
+  "version": "3.1.0",
+  "description": "Discovery + management wrappers around the gh CLI for AI coding agents. Ships as a standard agent skill, an Agent Plugins 1.0 plugin (plugin.json + skills/), and a dsh plugin (dsh.bundle.patch registers the skill at runtime).",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -10,10 +10,9 @@
   },
   "files": [
     "lib",
-    "scripts",
-    "references",
+    "skills",
     "cordis.patch.yml",
-    "SKILL.md",
+    "plugin.json",
     "README.md",
     "README_zh.md",
     "LICENSE"

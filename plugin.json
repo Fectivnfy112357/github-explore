@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "github-explore",
+  "version": "3.1.0",
+  "description": "Discovery + management wrappers around the gh CLI for AI coding agents: find repos, multi-axis explore, trending, repo summaries, similar projects, code search, issue/PR search, and org audits.",
+  "author": {
+    "name": "贾晓源 (Fectivnfy112357)",
+    "url": "https://github.com/Fectivnfy112357"
+  },
+  "homepage": "https://github.com/Fectivnfy112357/github-explore",
+  "repository": "https://github.com/Fectivnfy112357/github-explore",
+  "license": "MIT",
+  "keywords": [
+    "github",
+    "gh",
+    "search",
+    "discovery",
+    "audit",
+    "agent-skills"
+  ]
+}

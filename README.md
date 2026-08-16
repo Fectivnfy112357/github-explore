@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://www.python.org/)
 [![Scripts: 9](https://img.shields.io/badge/scripts-9-brightgreen.svg)](#the-scripts)
-[![Schemas: 3/9](https://img.shields.io/badge/schemas-3%2F9-yellow.svg)](scripts/schemas)
+[![Schemas: 3/9](https://img.shields.io/badge/schemas-3%2F9-yellow.svg)](skills/github-explore/scripts/schemas)
 [![gh CLI required](https://img.shields.io/badge/gh-CLI-181717.svg?logo=github)](https://cli.github.com/)
 
 [English](README.md) · [简体中文](README_zh.md)
@@ -37,7 +37,7 @@ Plain `gh search` has three structural problems for agent-driven research:
 - **Multi-axis exploration** — `explore.py` lets the agent define 2-4 semantic axes per topic, runs them in parallel, and unions results with a relevance score that combines cross-axis hits, canonical anchor recall, and awesome-list signals.
 - **Smart defaults** — every discovery script filters forks and archived repos by default, enforces a minimum star floor, dedupes by `fullName`, and renders in a layered markdown summary (~3KB stdout).
 - **Layered output** — full reports go to `%TEMP%/gh-explore-{topic}-{ts}.md` automatically; the agent reads the summary, and pulls the file only when it needs more detail. Default exploration drops your context from ~18KB to ~2KB.
-- **Field-level contract** — `python scripts/<script>.py --schema` prints the output JSON structure for the three scripts that support it (`find_repos`, `explore`, `repo_summary`), backed by the schema files in `scripts/schemas/`. The other scripts' JSON mirrors `gh search`'s native camelCase fields (documented in `references/commands-search-format.md`).
+- **Field-level contract** — `python scripts/<script>.py --schema` prints the output JSON structure for the three scripts that support it (`find_repos`, `explore`, `repo_summary`), backed by the schema files in `skills/github-explore/scripts/schemas/`. The other scripts' JSON mirrors `gh search`'s native camelCase fields (documented in `skills/github-explore/references/commands-search-format.md`).
 - **No new CLI surface** — every script is a wrapper over `gh search` or `gh repo view`. You can drop the skill and run the same `gh` commands by hand; the value is in the filter, dedup, and relevance scoring.
 
 ---
@@ -77,10 +77,30 @@ dsh plugin --profile web add /path/to/github-explore
 ```
 
 After a profile restart, the `github-explore` skill appears in the agent's
-catalog — the plugin (`lib/index.js`) parses `SKILL.md` and registers it with
-`ctx.skills`, with `resourceBase` pointing at the package directory so the
-skill body's `scripts/` / `references/` paths keep working. Remove with
+catalog — the plugin (`lib/index.js`) parses
+`skills/github-explore/SKILL.md` and registers it with `ctx.skills`, with
+`resourceBase` pointing at the skill directory so the skill body's
+`scripts/` / `references/` paths keep working. Remove with
 `dsh plugin --profile web remove github-explore`.
+
+### Install as an Agent Plugins 1.0 plugin
+
+The repo is also an [Agent Plugins](https://agent-plugins.org/) 1.0 package:
+`plugin.json` declares the manifest and the skill lives (self-contained, with
+its `scripts/` and `references/`) at the fixed `skills/github-explore/`
+location. Any Agent Plugins 1.0-compatible client (ChatGPT, Codex, Cursor,
+GitHub Copilot, Kiro, VS Code, …) can load it directly from the repo
+(https://github.com/Fectivnfy112357/github-explore) or from a locally
+checked-out copy — no extra build step:
+
+```bash
+git clone https://github.com/Fectivnfy112357/github-explore.git
+# point your client at the repo root: plugin.json + skills/github-explore/SKILL.md
+```
+
+One repo, three install paths — `npx skills add` (standard skills),
+`dsh plugin --profile web add` (DeepSeek Harness), and any Agent Plugins 1.0
+client all read the same files.
 
 Each command writes a layered markdown summary to stdout (~3KB) and a full report to a temp file. Pass `--format json` for machine-readable output (explicit; piping does **not** auto-switch).
 

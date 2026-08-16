@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://www.python.org/)
 [![脚本数: 9](https://img.shields.io/badge/脚本-9-brightgreen.svg)](#脚本列表)
-[![Schema: 3/9](https://img.shields.io/badge/schema-3%2F9-yellow.svg)](scripts/schemas)
+[![Schema: 3/9](https://img.shields.io/badge/schema-3%2F9-yellow.svg)](skills/github-explore/scripts/schemas)
 [![依赖 gh CLI](https://img.shields.io/badge/依赖-gh%20CLI-181717.svg?logo=github)](https://cli.github.com/)
 
 [English version](README.md) · 简体中文
@@ -37,7 +37,7 @@
 - **多维度语义探索** — `explore.py` 让 agent 为每个主题定义 2-4 个语义轴，并行跑、合并去重，相关性得分综合了"跨轴命中数"、"经典锚点召回率"、"在 awesome list 里的信号"。
 - **智能默认值** — 每个发现脚本默认过滤 fork 和 archived repo、设最低 star 门槛、按 `fullName` 去重、输出分层 markdown 摘要（约 3KB stdout）。
 - **分层输出** — 完整报告自动写到 `%TEMP%/gh-explore-{topic}-{ts}.md`；agent 读摘要就行，要细节再拉文件。一次探索把 context 从 ~18KB 压到 ~2KB。
-- **字段级契约** — `python scripts/<script>.py --schema` 打印 3 个支持脚本（`find_repos` / `explore` / `repo_summary`）的输出 JSON 结构，配套 `scripts/schemas/` 下的 schema 文件；其余脚本的 JSON 与 `gh search` 原生 camelCase 字段一致（见 `references/commands-search-format.md`）。
+- **字段级契约** — `python scripts/<script>.py --schema` 打印 3 个支持脚本（`find_repos` / `explore` / `repo_summary`）的输出 JSON 结构，配套 `skills/github-explore/scripts/schemas/` 下的 schema 文件；其余脚本的 JSON 与 `gh search` 原生 camelCase 字段一致（见 `skills/github-explore/references/commands-search-format.md`）。
 - **不引入新 CLI 表面** — 每个脚本就是 `gh search` 或 `gh repo view` 的封装。去掉 skill 你照样能手动跑同样的 `gh` 命令；价值在过滤、去重、打分这套。
 
 ---
@@ -77,9 +77,27 @@ dsh plugin --profile web add /path/to/github-explore
 ```
 
 profile 重启后 `github-explore` skill 会出现在 agent 目录里——插件
-（`lib/index.js`）解析 `SKILL.md` 并通过 `ctx.skills` 注册，`resourceBase`
-指向包目录，skill 正文里的 `scripts/` / `references/` 相对路径照常可用。
+（`lib/index.js`）解析 `skills/github-explore/SKILL.md` 并通过
+`ctx.skills` 注册，`resourceBase` 指向 skill 目录，skill 正文里的
+`scripts/` / `references/` 相对路径照常可用。
 卸载：`dsh plugin --profile web remove github-explore`。
+
+### 作为 Agent Plugins 1.0 插件安装
+
+这个仓库同时也是 [Agent Plugins](https://agent-plugins.org/) 1.0 包：
+`plugin.json` 声明清单，skill 以自包含形态（含 `scripts/` 和
+`references/`）放在固定的 `skills/github-explore/` 位置。任何兼容
+Agent Plugins 1.0 的客户端（ChatGPT、Codex、Cursor、GitHub Copilot、
+Kiro、VS Code 等）都可以直接从仓库加载：
+
+```bash
+git clone https://github.com/Fectivnfy112357/github-explore.git
+# 把客户端指向仓库根目录即可：plugin.json + skills/github-explore/SKILL.md
+```
+
+一个仓库，三条安装路径——`npx skills add`（标准 skills）、
+`dsh plugin --profile web add`（DeepSeek Harness）、任意 Agent Plugins 1.0
+客户端读的都是同一套文件。
 
 每条命令往 stdout 写约 3KB 分层 markdown 摘要、往 temp 文件写完整报告。需要 JSON 加 `--format json`（**显式**；管道不会自动切）。
 
