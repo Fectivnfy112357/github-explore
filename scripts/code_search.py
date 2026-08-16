@@ -13,7 +13,15 @@ import json
 import sys
 from typing import List
 
-from _lib import detect_format, ensure_auth, format_table, gh_json, humanize_date
+from _lib import (
+    detect_format,
+    ensure_auth,
+    format_table,
+    gh_json,
+    gh_search_with_retry,
+    humanize_date,
+    warn,
+)
 
 
 # `gh search code` available JSON fields (no `size`, no `language`).
@@ -57,9 +65,11 @@ def main() -> int:
         qualifiers.append(f"org:{args.org}")
     q = " ".join(qualifiers)
 
-    results = gh_json([
-        "search", "code", q, "--limit", str(args.limit), "--json", CODE_FIELDS,
-    ]) or []
+    results, err = gh_search_with_retry(
+        "code", q, ["--limit", str(args.limit), "--json", CODE_FIELDS]
+    )
+    if err:
+        warn(f"search issue: {err}")
 
     # Optional post-filter by repo stars (code search doesn't support star qualifier)
     if args.min_stars > 0 and results:

@@ -14,7 +14,16 @@ import json
 import sys
 from typing import List
 
-from _lib import detect_format, ensure_auth, format_table, gh_json, humanize_date, parse_since
+from _lib import (
+    detect_format,
+    ensure_auth,
+    filter_issues,
+    format_table,
+    gh_search_with_retry,
+    humanize_date,
+    parse_since,
+    warn,
+)
 
 
 # `gh search issues` JSON fields (note: commentsCount, not comments).
@@ -86,18 +95,27 @@ def main() -> int:
         qualifiers.append("no:label")
     q = " ".join(qualifiers)
 
-    results = gh_json([
-        "search", "issues", q,
-        "--limit", str(args.limit),
-        "--sort", args.sort,
-        "--order", args.order,
-        "--json", ISSUE_FIELDS,
-    ]) or []
+    results, err = gh_search_with_retry(
+        "issues", q,
+        ["--limit", str(args.limit), "--sort", args.sort,
+         "--order", args.order, "--json", ISSUE_FIELDS],
+    )
+    if err:
+        warn(f"search issue: {err}")
+    # Defensive post-filter: gh CLI quoting can silently drop is:/label:/
+    # updated: qualifiers, so re-check the returned JSON fields.
+    results = filter_issues(
+        results,
+        state=args.state,
+        since=args.since,
+        labels=args.label,
+    )
 
     fmt = detect_format(args.format)
     if fmt == "json":
         print(json.dumps(results, indent=2, ensure_ascii=False))
-    elif fmt == "markdown":
+        return 0
+    if fmt == "markdown":
         print(f"# Issue/PR search: `{q}`\n")
         for r in results:
             repo = r.get("repository", {})

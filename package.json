@@ -1,0 +1,42 @@
+{
+  "name": "github-explore",
+  "version": "3.0.0",
+  "description": "Discovery + management wrappers around the gh CLI for AI coding agents. Ships as a standard agent skill (SKILL.md) AND as a dsh plugin (dsh.bundle.patch registers the skill at runtime).",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "scripts",
+    "references",
+    "schemas",
+    "SKILL.md",
+    "README.md",
+    "README_zh.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fectivnfy112357/github-explore.git"
+  },
+  "keywords": [
+    "deepseek",
+    "dsh",
+    "dsh-plugin",
+    "skill",
+    "github",
+    "gh",
+    "search",
+    "discovery",
+    "audit"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

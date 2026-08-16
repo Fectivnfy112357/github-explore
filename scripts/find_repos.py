@@ -33,11 +33,13 @@ from _lib import (
     detect_format,
     die,
     ensure_auth,
+    filter_repos,
     format_table,
-    gh_json,
+    gh_search_with_retry,
     humanize_date,
     parse_since,
     print_schema,
+    warn,
 )
 
 
@@ -229,10 +231,13 @@ def main() -> int:
     # to know which mode to pick.
     seen: Dict[str, Dict[str, Any]] = {}
     scope_hits: Dict[str, int] = {}
+    search_failures: List[str] = []
     for q in queries:
-        batch = gh_json(
-            ["search", "repos", q, "--limit", str(args.limit), "--json", REPO_FIELDS]
-        ) or []
+        batch, err = gh_search_with_retry(
+            "repos", q, ["--limit", str(args.limit), "--json", REPO_FIELDS]
+        )
+        if err:
+            search_failures.append(f"{q!r}: {err}")
         for r in batch:
             fn = r.get("fullName")
             if not fn:
@@ -242,11 +247,35 @@ def main() -> int:
             else:
                 seen[fn] = r
                 scope_hits[fn] = 1
+    if not seen and search_failures:
+        die(f"search failed: {search_failures[0]}")
+    for failure in search_failures:
+        warn(f"search issue: {failure}")
+
+    # Defensive post-filter: gh CLI quoting can silently drop qualifiers,
+    # and even archived:false can leak archived repos -- re-check the JSON
+    # fields so the script-level filters hold on every gh version.
+    seen = {
+        r["fullName"]: r
+        for r in filter_repos(
+            seen.values(),
+            include_forks=args.include_forks,
+            include_archived=args.include_archived,
+            min_stars=args.min_stars,
+            max_stars=args.max_stars,
+            language=args.language,
+            pushed_since=args.pushed_since,
+            created_since=args.created_since,
+            owner=args.owner,
+            org=args.org,
+            license_spdx=args.license,
+        )
+    }
     # Annotate soft relevance, then sort with the bonus so on-topic
     # mid-tier projects aren't crowded out by README-collision noise.
     terms = [w for w in args.query.lower().split() if len(w) > 1]
     for fn, r in seen.items():
-        r["_rel"] = _relevance(r, terms) + (1 if scope_hits[fn] > 1 else 0)
+        r["_rel"] = _relevance(r, terms) + (1 if scope_hits.get(fn, 0) > 1 else 0)
     results = sorted(
         seen.values(),
         key=lambda r: -((r.get("stargazersCount") or 0) + (r.get("_rel", 0) * REL_BONUS)),

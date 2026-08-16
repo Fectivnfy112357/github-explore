@@ -17,10 +17,12 @@ from _lib import (
     detect_format,
     die,
     ensure_auth,
+    filter_repos,
     format_table,
-    gh_json,
+    gh_search_with_retry,
     humanize_date,
     parse_since,
+    warn,
 )
 
 
@@ -81,13 +83,24 @@ def main() -> int:
     qual.append("archived:false")
     q = " ".join(qual)
 
-    results = gh_json([
-        "search", "repos", q,
-        "--limit", str(args.limit),
-        "--sort", args.sort,
-        "--order", args.order,
-        "--json", REPO_FIELDS,
-    ]) or []
+    results, err = gh_search_with_retry(
+        "repos", q,
+        ["--limit", str(args.limit), "--sort", args.sort,
+         "--order", args.order, "--json", REPO_FIELDS],
+    )
+    if err:
+        warn(f"search issue: {err}")
+    # Defensive post-filter (gh CLI quoting can silently drop qualifiers).
+    results = filter_repos(
+        results,
+        include_forks=False,
+        include_archived=False,
+        min_stars=args.min_stars,
+        max_stars=args.max_stars,
+        language=args.language,
+        pushed_since=args.window if args.by == "pushed" else None,
+        created_since=args.window if args.by == "created" else None,
+    )
 
     fmt = detect_format(args.format)
     if fmt == "json":

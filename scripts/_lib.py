@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -27,7 +28,8 @@ for _stream in (sys.stdout, sys.stderr):
 # ---------- gh invocation ----------
 
 def run_gh(args: Sequence[str], timeout: int = 90) -> subprocess.CompletedProcess:
-    """Run a `gh` command. Raises on failure unless check=False."""
+    """Run a gh command; returns the CompletedProcess (callers check
+    returncode). Dies only when the binary is missing or the call times out."""
     try:
         return subprocess.run(
             ["gh", *args],
@@ -235,4 +237,182 @@ def dedupe_repos(repos: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if key and key not in seen:
             seen.add(key)
             out.append(r)
+    return out
+
+
+# ---------- search with retry ----------
+
+def _classify_search_error(err: str) -> str:
+    """Short, human-readable reason for a failed gh search call."""
+    low = err.lower()
+    if "rate limit" in low or "403" in err or "429" in err:
+        return "rate limit"
+    if "invalid search query" in low or "422" in err:
+        return "invalid query"
+    if "not found" in low or "404" in err:
+        return "not found"
+    return "gh failed"
+
+
+def gh_search_with_retry(
+    search_type: str,
+    query: str,
+    extra: Sequence[str],
+    max_attempts: int = 3,
+    timeout: int = 60,
+) -> Tuple[List[Any], str]:
+    """Run `gh search <search_type> <query tokens> <extra>` with rate-limit retry.
+
+    Returns (parsed_list_or_empty, reason). reason is '' when the command
+    succeeded (even with an empty result set); otherwise a short description
+    of what went wrong ('rate limit', 'invalid query', 'timeout', ...).
+    Callers should warn() on a non-empty reason and treat an empty list as
+    "no usable results" -- NOT as a certain "no matches". Never sys.exits
+    (except when the gh binary itself is missing).
+
+    The query is passed as SEPARATE positional arguments (one per whitespace
+    token), never as a single quoted argument: gh CLI rewrites a single-arg
+    multi-qualifier query into one quoted value for the first qualifier, which
+    makes GitHub silently drop every qualifier after it (cli/cli#13678 —
+    e.g. `language:` and `stars:>=` vanish after `pushed:>`). Splitting the
+    tokens sidesteps the quoting entirely; quoted phrases inside the query
+    (e.g. `"exact phrase"`) survive because gh joins the args back with single
+    spaces. Scripts should STILL post-filter their results with
+    filter_repos()/filter_issues() as defense in depth (GitHub's index can
+    leak archived repos even with `archived:false`).
+    """
+    delay = 2.0
+    last_err = ""
+    for attempt in range(max_attempts):
+        try:
+            proc = subprocess.run(
+                ["gh", "search", search_type, *query.split(), *extra],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except FileNotFoundError:
+            die("`gh` CLI not found on PATH. Install from https://cli.github.com/")
+        except subprocess.TimeoutExpired:
+            return [], "timeout"
+        if proc.returncode == 0:
+            out = (proc.stdout or "").strip()
+            if not out:
+                return [], ""
+            try:
+                parsed = json.loads(out)
+            except json.JSONDecodeError as e:
+                return [], f"bad JSON: {e}"
+            return (parsed if isinstance(parsed, list) else []), ""
+        err = (proc.stderr or proc.stdout or "").strip()
+        last_err = err
+        if "rate limit" in err.lower() or "403" in err or "429" in err:
+            warn(
+                f"rate limit hit (attempt {attempt + 1}/{max_attempts}), "
+                f"sleeping {delay:.0f}s"
+            )
+            time.sleep(delay)
+            delay *= 2
+            continue
+        # Not a rate limit: the query was likely rejected by GitHub.
+        return [], _classify_search_error(err)
+    warn(f"giving up after {max_attempts} attempts: {last_err[:120]}")
+    return [], "rate limit"
+
+
+# ---------- defensive post-filtering ----------
+#
+# gh CLI (and the GitHub search index) do not reliably honor qualifiers:
+#   * gh wraps multi-token queries in quotes, so GitHub silently drops every
+#     qualifier after the first (language:, topic:, min-stars, ... vanish).
+#   * even a plain `archived:false` can leak archived repos (search index lag).
+# The qualifiers are still sent (best effort, harmless when honored), and the
+# returned JSON fields are then re-checked here so script-level filters hold
+# regardless of gh version or GitHub quirks.
+
+def filter_repos(
+    repos: Iterable[Dict[str, Any]],
+    *,
+    include_forks: bool = False,
+    include_archived: bool = False,
+    min_stars: Optional[int] = None,
+    max_stars: Optional[int] = None,
+    language: Optional[str] = None,
+    pushed_since: Optional[str] = None,
+    created_since: Optional[str] = None,
+    owner: Optional[str] = None,
+    org: Optional[str] = None,
+    license_spdx: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Re-apply repo filter flags on the returned JSON fields (post-filter).
+
+    Accepts both `stargazersCount` (gh search repos, plural) and
+    `stargazerCount` (gh repo view, singular) star fields.
+    """
+    out: List[Dict[str, Any]] = []
+    for r in repos:
+        if not include_archived and r.get("isArchived"):
+            continue
+        if not include_forks and r.get("isFork"):
+            continue
+        stars = r.get("stargazersCount") or r.get("stargazerCount") or 0
+        if min_stars is not None and stars < min_stars:
+            continue
+        if max_stars is not None and stars > max_stars:
+            continue
+        lang = (r.get("language") or "").strip()
+        if language and lang.lower() != language.lower():
+            continue
+        if pushed_since:
+            pushed = (r.get("pushedAt") or "")
+            if pushed[:10] and pushed[:10] < parse_since(pushed_since):
+                continue
+        if created_since:
+            created = (r.get("createdAt") or "")
+            if created[:10] and created[:10] < parse_since(created_since):
+                continue
+        fn = (r.get("fullName") or "").lower()
+        if owner and not fn.startswith(owner.lower() + "/"):
+            continue
+        if org and not fn.startswith(org.lower() + "/"):
+            continue
+        if license_spdx:
+            lic = r.get("license")
+            spdx = ""
+            if isinstance(lic, dict):
+                spdx = lic.get("spdxId") or lic.get("key") or ""
+            elif isinstance(lic, str):
+                spdx = lic
+            if spdx.lower() != license_spdx.lower():
+                continue
+        out.append(r)
+    return out
+
+
+def filter_issues(
+    issues: Iterable[Dict[str, Any]],
+    *,
+    state: Optional[str] = None,
+    since: Optional[str] = None,
+    labels: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Re-apply issue/PR filter flags on returned JSON fields (post-filter).
+
+    Same rationale as filter_repos: gh's quoting can drop `is:open`,
+    `label:`, `updated:>` etc. from the query, so we re-check here.
+    """
+    out: List[Dict[str, Any]] = []
+    for i in issues:
+        st = (i.get("state") or "").lower()
+        if state and state != "all" and st != state.lower():
+            continue
+        if since:
+            updated = (i.get("updatedAt") or "")
+            if updated[:10] and updated[:10] < parse_since(since):
+                continue
+        if labels:
+            names = {(lab.get("name") or "") for lab in (i.get("labels") or [])}
+            if not all(lab in names for lab in labels):
+                continue
+        out.append(i)
     return out

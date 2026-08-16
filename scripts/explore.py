@@ -71,8 +71,10 @@ from _lib import (
     detect_format,
     die,
     ensure_auth,
+    filter_repos,
     format_table,
     gh_json,
+    gh_search_with_retry,
     humanize_date,
     info,
     print_schema,
@@ -158,10 +160,13 @@ def parse_axis_spec(spec: str) -> Axis:
     if "|" not in spec:
         die(f"Invalid --axis spec: {spec!r}. Expected 'name|query'.")
     name, raw = spec.split("|", 1)
+    name = name.strip()
+    if not name:
+        die(f"Invalid --axis spec: {spec!r}. Axis name must not be empty.")
     queries = split_query_angles(raw)
     if not queries:
         die(f"Axis {name!r} has no queries in {spec!r}")
-    return Axis(name=name.strip(), queries=queries)
+    return Axis(name=name, queries=queries)
 
 
 def split_query_angles(s: str) -> List[str]:
@@ -187,47 +192,10 @@ def split_query_angles(s: str) -> List[str]:
     return pieces
 
 
-def _gh_search_with_retry(args: List[str], max_attempts: int = 3) -> List[dict]:
-    """Like gh_json but retries on rate-limit (HTTP 403/429) with backoff.
-
-    Returns [] if all attempts fail. Does NOT sys.exit (so the calling axis
-    can keep going and we just record an error for that query angle).
-    Runs gh exactly once per attempt — no double subprocess on failure.
-    """
-    delay = 2.0
-    last_err = ""
-    for attempt in range(max_attempts):
-        try:
-            proc = subprocess.run(
-                ["gh"] + args, capture_output=True, text=True, timeout=60,
-            )
-        except FileNotFoundError:
-            die("`gh` CLI not found on PATH. Install from https://cli.github.com/")
-        except subprocess.TimeoutExpired:
-            last_err = "gh command timed out"
-            return []
-        if proc.returncode == 0:
-            out = (proc.stdout or "").strip()
-            if not out:
-                return []
-            try:
-                parsed = json.loads(out)
-            except json.JSONDecodeError as e:
-                last_err = f"bad JSON: {e}"
-                return []
-            return parsed if isinstance(parsed, list) else []
-        # Non-zero: inspect stderr to distinguish rate-limit from other errors.
-        err = (proc.stderr or proc.stdout or "").strip()
-        last_err = err
-        if "rate limit" in err.lower() or "403" in err or "429" in err:
-            warn(f"rate limit hit (attempt {attempt+1}/{max_attempts}), "
-                 f"sleeping {delay:.0f}s")
-            time.sleep(delay)
-            delay *= 2
-            continue
-        return []
-    warn(f"giving up after {max_attempts} attempts: {last_err[:80]}")
-    return []
+# NOTE: rate-limit retry + error classification now live in _lib
+# (gh_search_with_retry). The old local copy classified every failure as
+# "no results (rate limit?)", which masked real errors such as gh CLI
+# quoting a multi-token query into an invalid qualifier value.
 
 
 def _excluded(repo: Dict[str, Any], exclude: List[str]) -> bool:
@@ -254,13 +222,21 @@ def run_axis(axis: Axis) -> AxisResult:
     errors: List[str] = []
     for q in axis.queries:
         full_q = axis.build_query(q)
-        repos = _gh_search_with_retry([
-            "search", "repos", full_q,
-            "--limit", str(axis.limit),
-            "--json", REPO_FIELDS,
-        ])
-        if not repos:
-            errors.append(f"q={q!r}: no results (rate limit?)")
+        repos, err = gh_search_with_retry(
+            "repos", full_q,
+            ["--limit", str(axis.limit), "--json", REPO_FIELDS],
+        )
+        if err:
+            errors.append(f"q={q!r}: {err}")
+        # Defensive post-filter: gh CLI quoting can silently drop qualifiers
+        # (min_stars, language, fork/archived), so re-check the JSON fields.
+        repos = filter_repos(
+            repos,
+            include_forks=False,
+            include_archived=False,
+            min_stars=axis.min_stars,
+            language=axis.language,
+        )
         for r in repos:
             fn = r.get("fullName")
             if not fn:
@@ -419,8 +395,13 @@ def extract_repo_refs(readme_text: str) -> Set[str]:
     out: Set[str] = set()
     for m in REPO_LINK_RE.finditer(readme_text):
         owner, repo = m.group(1), m.group(2)
-        # Skip self-references and non-repo paths
-        if owner in {"sponsors", "orgs", "settings", "apps"}:
+        # Skip self-references and non-repo paths (github.com/<section>/...)
+        if owner in {
+            "sponsors", "orgs", "settings", "apps", "features", "topics",
+            "collections", "about", "explore", "marketplace", "pricing",
+            "login", "signup", "contact", "site", "security", "customers",
+            "enterprise", "readme", "careers", "team", "customer-stories",
+        }:
             continue
         if repo.endswith(".git") or "#" in repo or "?" in repo:
             repo = repo.split("#")[0].split("?")[0]

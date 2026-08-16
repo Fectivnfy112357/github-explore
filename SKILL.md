@@ -1,8 +1,8 @@
 ---
 name: github-explore
 description: "Use when the user wants to search/discover/summarize/audit GitHub (find repos about X, explore a topic's landscape, what's trending, repo overview, similar projects, code search, issue/PR search, org audit) or run gh CLI operations. Prefer scripts/ for discovery; raw gh commands for management ops."
-version: 2.0.0
-author: Hermes Agent
+version: 3.0.0
+author: Fectivnfy112357
 license: MIT
 metadata:
   hermes:
@@ -14,7 +14,7 @@ metadata:
 
 ## Overview
 
-两个层：`scripts/` 里 10 个 Python 脚本负责**搜索/发现/审计**（统一过滤 fork/archived、默认 star 下限、智能去重、relevance 排序、分层摘要+落盘），直接调用 `gh` 负责**管理操作**（建 repo、提 PR、改 label、跑 workflow 等）。脚本已做搜索 gotchas 处理，发现类请求优先用脚本。
+两个层：`scripts/` 里 9 个 Python 入口脚本 + `_lib.py` 共享库负责**搜索/发现/审计**（统一过滤 fork/archived、默认 star 下限、智能去重、relevance 排序、分层摘要+落盘；所有脚本都会对 gh 返回结果做防御性后过滤，见"搜索 gotchas"第 7 条），直接调用 `gh` 负责**管理操作**（建 repo、提 PR、改 label、跑 workflow 等）。脚本已做搜索 gotchas 处理，发现类请求优先用脚本。
 
 所有脚本输出格式 `--format {table,json,markdown}`，**默认 markdown**（分层摘要 + 落盘），`json` 供管道处理，`table` 窄终端 ASCII 视图。注意：**不会**因为 stdout 被管道就自动切 JSON——要 JSON 必须显式 `--format json`（见 Common Pitfalls #1）。
 
@@ -117,7 +117,7 @@ python scripts/org_landscape.py langchain-ai --group-by activity
 
 所有发现类脚本 `--format json` 返回**相同字段命名**（GitHub API 原生 camelCase，**不是** snake_case）。**不要猜字段——读契约的两种方式**：
 
-1. `python scripts/<script>.py --schema`（仅 4 个脚本支持：`find_repos` / `explore` / `repo_summary`，以及通过 `_lib.print_schema` 间接调）
+1. `python scripts/<script>.py --schema`（仅 3 个脚本支持：`find_repos` / `explore` / `repo_summary`）
 2. 直接看 `explore.schema.json` / `repo.schema.json` / `repo_summary.schema.json` 三个契约文件（位于脚本目录下的 schemas 子目录；其他 6 个脚本的输出结构以 `gh search` 原生 JSON 字段为准，参考 `references/commands-search-format.md`）
 
 三个契约文件的**关键差异**（猜错必踩的坑）：
@@ -147,9 +147,10 @@ python scripts/org_landscape.py langchain-ai --group-by activity
 1. `gh search` 的 `OR` 不符合直觉——`"A OR B"` 返回 0 结果。用 `;` 或带空格 `OR` 拆多 query。
 2. 语义查询用 `in:readme`，description 太短。
 3. `topic:` 作为硬过滤不可靠（项目打标签不一致）；优先 `stars:>=`。
-4. GitHub 限流：认证 ~5000/hr API + search 30/min。脚本默认 `--max-workers 2` 守住 30/min；撞 403/429 有重试但会慢。8 轴 × 3 角度 = 24+ 次调用，注意配额。
+4. GitHub 限流：认证 ~5000/hr API + search 30/min。所有脚本的搜索调用走共享的 `gh_search_with_retry`（撞 403/429 指数退避重试 3 次）；`explore.py` 默认 `--max-workers 2` 守住 30/min。8 轴 × 3 角度 = 24+ 次调用，注意配额。
 5. `gh search repos` 的 JSON **没有 topics 字段**（只有 `gh repo view` 有）。`discover.py` 因此用 N+1 次 `repo view` 取 topics（只取前 10 个 seed）；`find_repos` 因此不做 self-echo 过滤。
 6. 更多结果 ≠ 完整结果：文本搜索漏知名项目（`prometheus` 不写 "observability platform"）。生态型问题直接上 `explore.py --awesome`。
+7. **gh CLI 会把单参数的复合查询整体加引号**（cli/cli#13678）：`gh search repos "vector db language:python stars:>=500"` 会被改写成 `vector db language:"python stars:>=500"`，GitHub 因此丢弃第一个 qualifier 之后的所有限定词（language/topic/stars/pushed 全部静默失效），且 `archived:false` 也可能漏出归档仓库。脚本已双重规避：搜索调用把查询拆成独立参数传给 gh（绕开引号），并对返回 JSON 做防御性后过滤（`_lib.filter_repos`/`filter_issues`）。手写裸 gh 命令时请把每个 token 作为独立参数传入，如 `gh search repos "vector" "db" "language:python"`。
 
 ## 组装脚本（管道友好）
 

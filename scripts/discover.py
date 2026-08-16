@@ -25,12 +25,15 @@ from _lib import (
     detect_format,
     die,
     ensure_auth,
+    filter_repos,
     format_table,
     gh_json,
+    gh_search_with_retry,
     humanize_date,
     info,
     is_low_quality,
     parse_since,
+    warn,
 )
 
 
@@ -42,9 +45,12 @@ REPO_FIELDS = (
 
 
 def search_repos(query: str, limit: int) -> List[dict]:
-    return gh_json(
-        ["search", "repos", query, "--limit", str(limit), "--json", REPO_FIELDS]
-    ) or []
+    results, err = gh_search_with_retry(
+        "repos", query, ["--limit", str(limit), "--json", REPO_FIELDS]
+    )
+    if err:
+        warn(f"search issue: {err}")
+    return results
 
 
 def fetch_topics(full_name: str) -> List[str]:
@@ -138,6 +144,14 @@ def main() -> int:
         seed_q += " fork:false"
 
     seed = search_repos(seed_q, args.seed_limit)
+    seed = filter_repos(
+        seed,
+        include_forks=args.include_forks,
+        include_archived=False,
+        min_stars=args.min_stars,
+        language=args.language,
+        pushed_since=args.pushed_since,
+    )
     if not seed:
         die(f"No seed results for: {args.keyword!r}")
 
@@ -157,7 +171,15 @@ def main() -> int:
         if args.pushed_since:
             q += f" pushed:>{parse_since(args.pushed_since)}"
         results = search_repos(q, args.per_topic * 3)
-        # Quality filter
+        # Defensive post-filter, then quality filter
+        results = filter_repos(
+            results,
+            include_forks=args.include_forks,
+            include_archived=False,
+            min_stars=args.min_stars,
+            language=args.language,
+            pushed_since=args.pushed_since,
+        )
         results = [r for r in results if not is_low_quality(r, min_stars=args.min_stars)]
         # NOTE: we don't filter self-echo (repo whose topic == seed keyword).
         # gh search repos doesn't return topics; doing the check would need

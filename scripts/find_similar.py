@@ -24,10 +24,13 @@ from _lib import (
     detect_format,
     die,
     ensure_auth,
+    filter_repos,
     format_table,
     gh_json,
+    gh_search_with_retry,
     humanize_date,
     info,
+    warn,
 )
 
 
@@ -120,9 +123,19 @@ def main() -> int:
         q = f"topic:{topic} stars:>{args.min_stars} fork:false archived:false"
         if args.same_language and src_lang:
             q += f" language:{src_lang}"
-        results = gh_json([
-            "search", "repos", q, "--limit", "30", "--json", REPO_FIELDS,
-        ]) or []
+        results, err = gh_search_with_retry(
+            "repos", q, ["--limit", "30", "--json", REPO_FIELDS]
+        )
+        if err:
+            warn(f"search issue (topic {topic!r}): {err}")
+        # Defensive post-filter (gh CLI quoting can silently drop qualifiers).
+        results = filter_repos(
+            results,
+            include_forks=args.include_forks,
+            include_archived=False,
+            min_stars=args.min_stars,
+            language=src_lang if args.same_language else None,
+        )
         for r in results:
             if r.get("fullName") == src_full:
                 continue
@@ -138,9 +151,18 @@ def main() -> int:
     # Strategy B: language-only search (fallback when topics yield little).
     if len(candidates) < args.limit and args.same_language and src_lang:
         q = f"stars:>{args.min_stars} fork:false archived:false language:{src_lang}"
-        results = gh_json([
-            "search", "repos", q, "--limit", "30", "--json", REPO_FIELDS,
-        ]) or []
+        results, err = gh_search_with_retry(
+            "repos", q, ["--limit", "30", "--json", REPO_FIELDS]
+        )
+        if err:
+            warn(f"search issue (language fallback): {err}")
+        results = filter_repos(
+            results,
+            include_forks=args.include_forks,
+            include_archived=False,
+            min_stars=args.min_stars,
+            language=src_lang if args.same_language else None,
+        )
         for r in results:
             if r.get("fullName") == src_full:
                 continue

@@ -1,0 +1,13 @@
+# github-explore dsh bundle patch: register the skill at runtime.
+#
+# This bundle is installed with:
+#   dsh plugin --profile web add <spec>     (spec = git URL, path, or npm name)
+# pnpm installs the package into the profile's node_modules, and the loader
+# appends it to dsh.profile.bundles because package.json declares
+# dsh.bundle.patch. The entry below mounts lib/index.js, a small cordis
+# plugin that parses SKILL.md and registers it with ctx.skills so the skill
+# appears in the agent's catalog. The scripts/ and references/ trees ship
+# alongside, so the skill body's relative paths keep working.
+- insert:
+    - id: github-explore-skill
+      name: 'github-explore'

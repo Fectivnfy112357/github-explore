@@ -24,6 +24,7 @@ from _lib import (
     gh_json,
     humanize_date,
     info,
+    run_gh,
     warn,
 )
 
@@ -47,14 +48,43 @@ def classify_activity(pushed_at: str) -> str:
     return "dead"
 
 
-def fetch_all_repos_via_api(org: str, max_workers: int = 6) -> List[dict]:
-    """Use /orgs/{org}/repos paginated for a reliable JSON listing.
+def resolve_account(login: str) -> tuple:
+    """Return (is_org_or_None, public_repo_count) for a login.
+
+    Checks /orgs/{login} first, then /users/{login}, so a single code path
+    audits both organizations and individual user accounts. Probes use
+    run_gh (no die noise on a 404 for a user account).
+    """
+    def probe(endpoint: str):
+        result = run_gh([
+            "api", endpoint,
+            "--jq", "{public_repos: .public_repos, is_missing: (.message != null)}",
+        ])
+        if result.returncode != 0:
+            return None
+        try:
+            return json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return None
+
+    org = probe(f"/orgs/{login}")
+    if org and not org.get("is_missing"):
+        return True, int(org.get("public_repos") or 0)
+    user = probe(f"/users/{login}")
+    if user and not user.get("is_missing"):
+        return False, int(user.get("public_repos") or 0)
+    return None, 0
+
+
+def fetch_all_repos_via_api(login: str, max_workers: int = 6) -> List[dict]:
+    """Use /orgs/{org}/repos (or /users/{user}/repos) paginated for a
+    reliable JSON listing of an org or a user account.
 
     Pages are fetched in parallel (REST pagination is slow for big orgs).
     NOTE: we use `?per_page=` query string instead of `-F` because `gh api`
     treats `-F` as form fields and may dispatch a non-GET method.
 
-    The total repo count comes from `/orgs/{org}.public_repos` (one extra
+    The total repo count comes from the account's `public_repos` (one extra
     GET, ~50ms), which gives the exact page count so we know precisely when
     to stop. Without this, the old as_completed + break pattern could drop
     pages when the last partial page returned before a full one — page N's
@@ -66,23 +96,19 @@ def fetch_all_repos_via_api(org: str, max_workers: int = 6) -> List[dict]:
         "description: .description, stargazersCount: .stargazers_count, "
         "forksCount: .forks_count, language: .language, "
         "pushedAt: .pushed_at, isArchived: .archived, isFork: .fork, "
-        "isDisabled: .disabled, url: .html_url, topics: .topics, "
-        "visibility: .visibility, updatedAt: .updated_at"
+        "isDisabled: .disabled, isPrivate: .private, url: .html_url, "
+        "topics: .topics, visibility: .visibility, updatedAt: .updated_at"
         "}]"
     )
 
-    # Probe total count up front. 404 / no-access / empty org → bail.
-    meta = gh_json([
-        "api", f"/orgs/{org}",
-        "--jq",
-        "{public_repos: .public_repos, "
-        "is_missing: (.message != null)}",
-    ])
-    if not meta or meta.get("is_missing"):
-        return []
-    total = int(meta.get("public_repos") or 0)
+    # Probe account type + total count up front. Unknown login → bail.
+    is_org, total = resolve_account(login)
+    if is_org is None:
+        die(f"No such org or user: {login!r}")
     if total == 0:
         return []
+
+    info(f"scanning {'org' if is_org else 'user'} {login!r} ({total} public repos)")
 
     # Cap at 5000 for safety — warn the user if we truncated.
     truncated = total > 5000
@@ -90,11 +116,11 @@ def fetch_all_repos_via_api(org: str, max_workers: int = 6) -> List[dict]:
 
     def fetch_page(p: int) -> List[dict]:
         try:
-            return gh_json([
-                "api",
-                f"/orgs/{org}/repos?per_page=100&page={p}&type=public",
-                "--jq", REPO_JQ,
-            ]) or []
+            if is_org:
+                endpoint = f"/orgs/{login}/repos?per_page=100&page={p}&type=public"
+            else:
+                endpoint = f"/users/{login}/repos?per_page=100&page={p}"
+            return gh_json(["api", endpoint, "--jq", REPO_JQ]) or []
         except SystemExit:
             return []
 
@@ -139,14 +165,15 @@ def main() -> int:
     args = p.parse_args()
 
     ensure_auth()
-    info(f"listing repos for org: {args.org}")
+    info(f"listing repos for: {args.org}")
     repos = fetch_all_repos_via_api(args.org)
     if not repos:
-        die(f"No repos found for org {args.org!r} (or you lack access).")
+        die(f"No repos found for {args.org!r} (or you lack access).")
 
     info(f"{len(repos)} repos fetched")
     # Filter
     before = len(repos)
+    repos = [r for r in repos if not r.get("isPrivate")]
     repos = [r for r in repos if (r.get("stargazersCount") or 0) >= args.min_stars]
     if not args.include_archived:
         repos = [r for r in repos if not r.get("isArchived")]
