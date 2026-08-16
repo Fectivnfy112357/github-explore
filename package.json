@@ -12,7 +12,7 @@
     "lib",
     "scripts",
     "references",
-    "schemas",
+    "cordis.patch.yml",
     "SKILL.md",
     "README.md",
     "README_zh.md",
