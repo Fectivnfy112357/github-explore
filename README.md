@@ -49,7 +49,7 @@ Plain `gh search` has three structural problems for agent-driven research:
 npx skills add Fectivnfy112357/github-explore
 
 # Hermes Agent users
-hermes skills install https://raw.githubusercontent.com/Fectivnfy112357/github-explore/main/SKILL.md --force
+hermes skills install https://raw.githubusercontent.com/Fectivnfy112357/github-explore/main/skills/github-explore/SKILL.md --force
 
 # 2. Make sure gh CLI is authenticated
 gh auth status
@@ -66,13 +66,20 @@ python scripts/explore.py "multi-agent" \
 
 The same repo is also a dsh profile bundle: its `package.json` declares
 `dsh.bundle.patch`, so it installs like any other dsh plugin and registers the
-skill at runtime (no manual file copying):
+skill at runtime (no manual file copying). `dsh plugin` forwards its argument
+to pnpm, so any pnpm spec works — shortest forms first:
 
 ```bash
-# From a GitHub URL
+# GitHub shorthand (no publish needed) — shortest
+dsh plugin --profile web add Fectivnfy112357/github-explore
+
+# Full git URL
 dsh plugin --profile web add git+https://github.com/Fectivnfy112357/github-explore.git
 
-# Or from a local checkout / path / tarball (same flow)
+# Bare npm name — after this package is published (npm publish)
+dsh plugin --profile web add github-explore
+
+# Local checkout / path / tarball (same flow)
 dsh plugin --profile web add /path/to/github-explore
 ```
 
@@ -103,6 +110,34 @@ One repo, three install paths — `npx skills add` (standard skills),
 client all read the same files.
 
 Each command writes a layered markdown summary to stdout (~3KB) and a full report to a temp file. Pass `--format json` for machine-readable output (explicit; piping does **not** auto-switch).
+
+---
+
+## Repository layout
+
+A single repo serves all three packaging formats; the skill is self-contained
+under the Agent Plugins fixed location so it works identically no matter which
+installer copies it:
+
+```
+github-explore/
+├── plugin.json                    # Agent Plugins 1.0 manifest ($schema + name required)
+├── skills/
+│   └── github-explore/            # the one skill, fully self-contained
+│       ├── SKILL.md               #   skill body (frontmatter: name/description)
+│       ├── scripts/               #   9 entry scripts + _lib.py + schemas/
+│       └── references/            #   gh command references (commands-*.md)
+├── package.json                   # dsh plugin (dsh.bundle.patch) + npm metadata
+├── cordis.patch.yml               # dsh loader patch (inserts the skill entry)
+├── lib/index.js                   # dsh plugin: registers the skill via ctx.skills
+├── README.md / README_zh.md
+└── LICENSE
+```
+
+- **Agent Plugins 1.0** reads `plugin.json` + `skills/<name>/SKILL.md` (+ optional `mcp.json`).
+- **dsh** reads `package.json` → `dsh.bundle.patch` → `cordis.patch.yml` → `lib/index.js`.
+- **`npx skills add`** discovers `skills/<name>/SKILL.md` and installs the whole
+  skill directory (scripts + references included).
 
 ---
 
@@ -137,7 +172,8 @@ Each command writes a layered markdown summary to stdout (~3KB) and a full repor
                                      │ python scripts/<name>.py [args]
                                      ▼
             ┌────────────────────────────────────────────────────┐
-            │  scripts/  (9 entry points + _lib + __init__)     │
+            │  skills/github-explore/scripts/                   │
+            │  (9 entry points + _lib + __init__)               │
             │  ─────────────────────────────────────────────────│
             │  find_repos   explore   discover   trending       │
             │  repo_summary find_similar code_search            │
@@ -205,7 +241,7 @@ Issues and pull requests are welcome. This is a personal skill that's been refac
 Before opening a PR:
 
 1. Make sure the affected scripts still pass `python scripts/<name>.py --help` and (where supported) `--schema`.
-2. If you add a new script, add a row to the [scripts table](#the-scripts) and consider whether it needs a schema file under `scripts/schemas/`.
+2. If you add a new script, add a row to the [scripts table](#the-scripts) and consider whether it needs a schema file under `skills/github-explore/scripts/schemas/`.
 3. Keep the layered-output convention: stdout summary + temp-file full report, no exceptions.
 
 ---

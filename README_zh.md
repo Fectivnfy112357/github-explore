@@ -49,7 +49,7 @@
 npx skills add Fectivnfy112357/github-explore
 
 # Hermes Agent 用户：
-hermes skills install https://raw.githubusercontent.com/Fectivnfy112357/github-explore/main/SKILL.md --force
+hermes skills install https://raw.githubusercontent.com/Fectivnfy112357/github-explore/main/skills/github-explore/SKILL.md --force
 
 # 2. 确认 gh CLI 已认证
 gh auth status
@@ -66,13 +66,20 @@ python scripts/explore.py "多 agent 协作" \
 
 同一个仓库同时也是 dsh profile bundle：`package.json` 声明了
 `dsh.bundle.patch`，可以像普通 dsh 插件一样安装，skill 由插件在运行时注册
-（无需手动拷文件）：
+（无需手动拷文件）。`dsh plugin` 把参数转发给 pnpm，所以任何 pnpm spec
+写法都行——从短到长：
 
 ```bash
-# 从 GitHub URL 安装
+# GitHub 简写（无需发布）——最短
+dsh plugin --profile web add Fectivnfy112357/github-explore
+
+# 完整 git URL
 dsh plugin --profile web add git+https://github.com/Fectivnfy112357/github-explore.git
 
-# 或从本地路径 / tarball 安装（同一流程）
+# 裸 npm 包名——发布到 npm（npm publish）之后可用
+dsh plugin --profile web add github-explore
+
+# 本地路径 / tarball（同一流程）
 dsh plugin --profile web add /path/to/github-explore
 ```
 
@@ -100,6 +107,33 @@ git clone https://github.com/Fectivnfy112357/github-explore.git
 客户端读的都是同一套文件。
 
 每条命令往 stdout 写约 3KB 分层 markdown 摘要、往 temp 文件写完整报告。需要 JSON 加 `--format json`（**显式**；管道不会自动切）。
+
+---
+
+## 仓库布局
+
+一个仓库同时服务三种打包格式；skill 在 Agent Plugins 固定位置下自包含，
+无论哪种安装器拷贝它行为都一致：
+
+```
+github-explore/
+├── plugin.json                    # Agent Plugins 1.0 清单（$schema + name 必填）
+├── skills/
+│   └── github-explore/            # 唯一的 skill，完全自包含
+│       ├── SKILL.md               #   skill 正文（frontmatter: name/description）
+│       ├── scripts/               #   9 个入口脚本 + _lib.py + schemas/
+│       └── references/            #   gh 命令参考（commands-*.md）
+├── package.json                   # dsh 插件（dsh.bundle.patch）+ npm 元数据
+├── cordis.patch.yml               # dsh loader 补丁（插入 skill 条目）
+├── lib/index.js                   # dsh 插件：通过 ctx.skills 注册 skill
+├── README.md / README_zh.md
+└── LICENSE
+```
+
+- **Agent Plugins 1.0** 读 `plugin.json` + `skills/<name>/SKILL.md`（可选 `mcp.json`）。
+- **dsh** 读 `package.json` → `dsh.bundle.patch` → `cordis.patch.yml` → `lib/index.js`。
+- **`npx skills add`** 发现 `skills/<name>/SKILL.md` 并安装整个 skill 目录
+  （scripts + references 一并带上）。
 
 ---
 
@@ -134,7 +168,8 @@ git clone https://github.com/Fectivnfy112357/github-explore.git
                                      │ python scripts/<name>.py [args]
                                      ▼
             ┌────────────────────────────────────────────────────┐
-            │  scripts/  （9 个入口 + _lib + __init__）          │
+            │  skills/github-explore/scripts/                   │
+            │  （9 个入口 + _lib + __init__）                    │
             │  ─────────────────────────────────────────────────│
             │  find_repos   explore   discover   trending       │
             │  repo_summary find_similar code_search            │
@@ -202,7 +237,7 @@ git clone https://github.com/Fectivnfy112357/github-explore.git
 提 PR 之前：
 
 1. 确认改动的脚本 `python scripts/<name>.py --help` 和（如果支持）`--schema` 还能跑通。
-2. 新增脚本的话，往[脚本列表](#脚本列表)加一行，考虑是否要在 `scripts/schemas/` 加 schema 文件。
+2. 新增脚本的话，往[脚本列表](#脚本列表)加一行，考虑是否要在 `skills/github-explore/scripts/schemas/` 加 schema 文件。
 3. 保持分层输出约定：stdout 摘要 + temp 文件全量报告，没有例外。
 
 ---
