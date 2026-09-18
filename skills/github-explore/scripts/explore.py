@@ -276,7 +276,9 @@ def fetch_readme(full_name: str, timeout: int = 15) -> str:
     try:
         out = subprocess.run(
             ["gh", "api", f"/repos/{full_name}/readme", "--jq", ".content"],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            timeout=timeout,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return ""
@@ -530,7 +532,9 @@ def backfill_canonical(
         try:
             out = subprocess.run(
                 ["gh", "api", f"/repos/{fn}", "--jq", jq],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                timeout=30,
             )
             if out.returncode != 0 or not out.stdout.strip():
                 continue

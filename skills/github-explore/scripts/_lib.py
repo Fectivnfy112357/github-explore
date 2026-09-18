@@ -29,12 +29,20 @@ for _stream in (sys.stdout, sys.stderr):
 
 def run_gh(args: Sequence[str], timeout: int = 90) -> subprocess.CompletedProcess:
     """Run a gh command; returns the CompletedProcess (callers check
-    returncode). Dies only when the binary is missing or the call times out."""
+    returncode). Dies only when the binary is missing or the call times out.
+
+    Decodes stdout/stderr as UTF-8 (with replacement on bad bytes) so a
+    non-UTF-8 host locale (e.g. CP936/GBK on Chinese Windows) doesn't raise
+    UnicodeDecodeError inside subprocess's reader thread and silently turn
+    real results into an empty list.
+    """
     try:
         return subprocess.run(
             ["gh", *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
     except FileNotFoundError:
@@ -289,6 +297,8 @@ def gh_search_with_retry(
                 ["gh", "search", search_type, *query.split(), *extra],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout,
             )
         except FileNotFoundError:
