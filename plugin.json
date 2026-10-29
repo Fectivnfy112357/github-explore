@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "github-explore",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Discovery + management wrappers around the gh CLI for AI coding agents: find repos, multi-axis explore, trending, repo summaries, similar projects, code search, issue/PR search, and org audits.",
   "author": {
     "name": "贾晓源 (Fectivnfy112357)",

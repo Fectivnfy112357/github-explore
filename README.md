@@ -90,6 +90,15 @@ catalog — the plugin (`lib/index.js`) parses
 `scripts/` / `references/` paths keep working. Remove with
 `dsh plugin --profile web remove github-explore`.
 
+Compatibility evidence (2026-10-29): on Linux with Node.js 26.8.1, DSH
+0.2.1-alpha.5, 0.2.1-rc.1 and 0.2.1-rc.2 each installed a local checkout into
+an isolated profile, started the host and exposed `github-explore` in
+`ctx.skills.list()`, then removed the package from the profile. The host was
+stopped after the registration probe; an interactive agent invocation and
+other Node.js or operating-system versions were not tested. These checks are
+not an independent security audit. The skill uses the `gh` CLI and its scripts
+may access files, the network and GitHub credentials through `gh`.
+
 ### Install as an Agent Plugins 1.0 plugin
 
 The repo is also an [Agent Plugins](https://agent-plugins.org/) 1.0 package:
