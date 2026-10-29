@@ -91,7 +91,8 @@ catalog — the plugin (`lib/index.js`) parses
 `dsh plugin --profile web remove github-explore`.
 
 Compatibility evidence (2026-10-29): on Linux with Node.js 26.8.1, DSH
-0.2.1-alpha.5, 0.2.1-rc.1 and 0.2.1-rc.2 each installed a local checkout into
+0.2.1-alpha.5, 0.2.1-rc.1, 0.2.1-rc.2, 0.2.1-rc.3, 0.2.1-rc.4 and
+0.2.2-alpha.2 each installed a local checkout into
 an isolated profile, started the host and exposed `github-explore` in
 `ctx.skills.list()`, then removed the package from the profile. The host was
 stopped after the registration probe; an interactive agent invocation and
